@@ -51,9 +51,9 @@ HOOK_DEFINE_INLINE(UIAttachmentDamage) {
 
         int attachment_damage;
         if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "LargeSword", 10) == 0) {
-            attachment_damage = static_cast<int>(std::floor(aai_row->attachment_dmg * 1.0526316));
+            attachment_damage = static_cast<int>(std::floor(static_cast<float>(aai_row->attachment_dmg) * 1.0526316));
         } else if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "Spear", 5) == 0) {
-            attachment_damage = static_cast<int>(std::ceil(aai_row->attachment_dmg * 0.7536613));
+            attachment_damage = static_cast<int>(std::ceil(static_cast<float>(aai_row->attachment_dmg) * 0.7536613));
         } else {
             attachment_damage = aai_row->attachment_dmg;
         }
@@ -70,9 +70,9 @@ HOOK_DEFINE_INLINE(UIAttachmentDamage1) {
 
         int attachment_damage;
         if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "LargeSword", 10) == 0) {
-            attachment_damage = static_cast<int>(std::floor(aai_row->attachment_dmg * 1.0526316));
+            attachment_damage = static_cast<int>(std::floor(static_cast<float>(aai_row->attachment_dmg) * 1.0526316));
         } else if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "Spear", 5) == 0) {
-            attachment_damage = static_cast<int>(std::ceil(aai_row->attachment_dmg * 0.7536613));
+            attachment_damage = static_cast<int>(std::ceil(static_cast<float>(aai_row->attachment_dmg) * 0.7536613));
         } else {
             attachment_damage = aai_row->attachment_dmg;
         }
@@ -87,9 +87,9 @@ HOOK_DEFINE_INLINE(UIAttachmentDamage2) {
 
         int attachment_damage;
         if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "LargeSword", 10) == 0) {
-            attachment_damage = static_cast<int>(std::floor(aai_row->attachment_dmg * 1.0526316));
+            attachment_damage = static_cast<int>(std::floor(static_cast<float>(aai_row->attachment_dmg) * 1.0526316));
         } else if (pai_row->weapon_type && strncmp(pai_row->weapon_type, "Spear", 5) == 0) {
-            attachment_damage = static_cast<int>(std::ceil(aai_row->attachment_dmg * 0.7536613));
+            attachment_damage = static_cast<int>(std::ceil(static_cast<float>(aai_row->attachment_dmg) * 0.7536613));
         } else {
             attachment_damage = aai_row->attachment_dmg;
         }
