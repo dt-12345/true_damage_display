@@ -30,7 +30,7 @@ HOOK_DEFINE_REPLACE(CalcAttachmentDamage) {
     }
 };
 
-// calcAttack is inlined the WeaponComponent's sensor register function (0x71011117d4 on 1.2.1) so we need to manually fix it
+// calcAttack is inlined in WeaponComponent's sensor register function (0x71011117d4 on 1.2.1) so we need to manually fix it
 HOOK_DEFINE_INLINE(FixWeaponDamage) {
     static void Callback(exl::hook::InlineCtx* ctx) {
         if (version == 0) {
