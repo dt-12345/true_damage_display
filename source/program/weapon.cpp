@@ -1,6 +1,16 @@
+#include "config.h"
 #include "weapon.h"
 
 #include <cmath>
+
+static float getAttachMulAttackValueThunk(void* cmp) {
+    if (version < 6)
+        return getAttachMulAttackValue(cmp);
+    WeaponComponent* comp = reinterpret_cast<WeaponComponent*>(cmp);
+    if (!comp->is_attached)
+        return 1.f;
+    return getAttachMulAttackValue(comp->document->typed_param);
+}
 
 // replaces 0x7101674bc4 on 1.2.1
 int WeaponComponent::calcAttachmentAttack() {
@@ -20,7 +30,7 @@ int WeaponComponent::calcAttachmentAttack() {
     }
 
     additional_atk += static_cast<int>(getAttachZonauAttackValue(this));
-    additional_atk = static_cast<int>(std::ceil(static_cast<float>(additional_atk) * getAttachMulAttackValue(this)));
+    additional_atk = static_cast<int>(std::ceil(static_cast<float>(additional_atk) * getAttachMulAttackValueThunk(this)));
     if (ex_effect == ExEffectType::AttackUp || ex_effect == ExEffectType::AttackUpPlus) {
         additional_atk += ex_effect_value;
     }
@@ -50,7 +60,7 @@ int WeaponComponent100::calcAttachmentAttack() {
     }
 
     additional_atk += static_cast<int>(getAttachZonauAttackValue(this));
-    additional_atk = static_cast<int>(std::ceil(static_cast<float>(additional_atk) * getAttachMulAttackValue(this)));
+    additional_atk = static_cast<int>(std::ceil(static_cast<float>(additional_atk) * getAttachMulAttackValueThunk(this)));
     if (ex_effect == ExEffectType::AttackUp || ex_effect == ExEffectType::AttackUpPlus) {
         additional_atk += ex_effect_value;
     }

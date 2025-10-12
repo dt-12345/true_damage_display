@@ -19,8 +19,7 @@ __module_start:
     b entrypoint
     .word __nx_mod0 - __module_start
 
-    .align 4
-    .ascii "~~exlaunch uwu~~"
+    // rip ~~exlaunch uwu~~
 
 entrypoint:
    // Arguments on NSO entry:

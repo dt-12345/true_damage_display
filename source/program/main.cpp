@@ -1,4 +1,13 @@
-#include "weapon.h"
+// #define TRUE_DAMAGE_DISPLAY
+#define NO_SAVE_IN_COMBAT
+
+#ifdef TRUE_DAMAGE_DISPLAY
+#   include "weapon.h"
+#endif
+#ifdef NO_SAVE_IN_COMBAT
+#   include "gamebalance.h"
+#endif
+
 #include "config.h"
 #include "binaryoffsethelper.h"
 
@@ -10,6 +19,7 @@
 
 u64 main_offset;
 
+#ifdef TRUE_DAMAGE_DISPLAY
 HOOK_DEFINE_REPLACE(CalcWeaponDamage) {
     static int Callback(void* _this) {
         if (version == 0) {
@@ -65,7 +75,7 @@ HOOK_DEFINE_INLINE(UIAttachmentDamage) {
 };
 HOOK_DEFINE_INLINE(UIAttachmentDamage1) {
     static void Callback(exl::hook::InlineCtx* ctx) {
-        PouchActorInfoRow* pai_row = reinterpret_cast<PouchActorInfoRow*>(ctx->X[23]);
+        PouchActorInfoRow* pai_row = reinterpret_cast<PouchActorInfoRow*>(version < 6 ? ctx->X[23] : ctx->X[22]);
         AttachmentActorInfoRow* aai_row = reinterpret_cast<AttachmentActorInfoRow*>(ctx->X[0]);
 
         int attachment_damage;
@@ -94,17 +104,34 @@ HOOK_DEFINE_INLINE(UIAttachmentDamage2) {
             attachment_damage = aai_row->attachment_dmg;
         }
 
-        ctx->W[23] = static_cast<int>(std::ceil(static_cast<float>(attachment_damage) * pai_row->attach_mul_value));
-        ctx->W[24] = 0; // get rid of the ceiling add value because we called std::ceil ourselves
+        if (version > 5) {
+            ctx->W[22] = static_cast<int>(std::ceil(static_cast<float>(attachment_damage) * pai_row->attach_mul_value));
+            ctx->W[23] = 0; // get rid of the ceiling add value because we called std::ceil ourselves
+        } else {
+            ctx->W[23] = static_cast<int>(std::ceil(static_cast<float>(attachment_damage) * pai_row->attach_mul_value));
+            ctx->W[24] = 0; // get rid of the ceiling add value because we called std::ceil ourselves
+        }
     }
 };
 
 // set the WeaponType to SmallSword so the UI damage is calculated as such
 HOOK_DEFINE_INLINE(SetWeaponType) {
     static void Callback(exl::hook::InlineCtx* ctx) {
-        ctx->W[8] = static_cast<int>(WeaponType::SmallSword);
+        if (version > 5)
+            ctx->X[8] = ctx->X[11]; // they optimized away the string to enum conversion and just directly do string comparisons
+        else
+            ctx->W[8] = static_cast<int>(WeaponType::SmallSword);
     }
 };
+#endif
+
+#ifdef NO_SAVE_IN_COMBAT
+HOOK_DEFINE_INLINE(DisableSave) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        ctx->W[0] |= isInBattle();
+    }
+};
+#endif
 
 extern "C" void exl_main(void* x0, void* x1) {
     exl::hook::Initialize();
@@ -112,7 +139,7 @@ extern "C" void exl_main(void* x0, void* x1) {
     main_offset = exl::util::modules::GetTargetStart();
     version = InitializeAppVersion();
 
-    if (version == 0xffffffff) {
+    if (version == 0xffffffff || version > 8) {
         EXL_ABORT(0x69);
     }
 
@@ -121,6 +148,7 @@ extern "C" void exl_main(void* x0, void* x1) {
         CLASS::InstallAtOffset(OFFSET); \
     }
 
+#ifdef TRUE_DAMAGE_DISPLAY
     INSTALL(CalcWeaponDamage, sWeaponDamageOffsets1[version])
     INSTALL(CalcWeaponDamage, sWeaponDamageOffsets2[version])
     INSTALL(CalcAttachmentDamage, sAttachmentDamageOffsets[version])
@@ -131,11 +159,16 @@ extern "C" void exl_main(void* x0, void* x1) {
     INSTALL(SetWeaponType, sSetWeaponTypeOffsets1[version])
     INSTALL(SetWeaponType, sSetWeaponTypeOffsets2[version])
     INSTALL(SetWeaponType, sSetWeaponTypeOffsets3[version])
-
-    #undef INSTALL
-
     getAttachZonauAttackValue = reinterpret_cast<GetAttack*>(exl::util::modules::GetTargetOffset(sZonauAttachValueOffsets[version]));
     getAttachMulAttackValue = reinterpret_cast<GetAttack*>(exl::util::modules::GetTargetOffset(sAttachMulValueOffsets[version]));
+#endif
+
+#ifdef NO_SAVE_IN_COMBAT
+    INSTALL(DisableSave, sDisableSaveOffsets[version])
+    gGameBalanceModulePtr = reinterpret_cast<GameBalanceModule**>(exl::util::modules::GetTargetOffset(sGameBalanceModuleOffsets[version]));
+#endif
+
+    #undef INSTALL
 }
 
 extern "C" NORETURN void exl_exception_entry() {

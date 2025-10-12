@@ -35,5 +35,14 @@ u32 InitializeAppVersion() {
     else if (strncmp(sAppVersion, GAME_VERSION_1_2_1, 16) == 0) {
         sAppVersionIndex = 5;
     }
+    else if (strncmp(sAppVersion, GAME_VERSION_1_4_0, 16) == 0) {
+        sAppVersionIndex = 6;
+    }
+    else if (strncmp(sAppVersion, GAME_VERSION_1_4_1, 16) == 0) {
+        sAppVersionIndex = 7;
+    }
+    else if (strncmp(sAppVersion, GAME_VERSION_1_4_2, 16) == 0) {
+        sAppVersionIndex = 8;
+    }
     return sAppVersionIndex;
 }

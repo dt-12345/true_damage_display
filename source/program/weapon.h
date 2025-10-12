@@ -11,13 +11,22 @@ enum class ExEffectType : u32 {
     LongThrow, RapidFire, ThreeWayZoom, FiveWay, GuardUp, GuardUpPlus
 };
 
+struct Document {
+    char _00[0x150];
+    void* typed_param;
+};
+
 struct WeaponComponent {
-    char _00[0x218];
+    char _00[0x10];
+    Document* document;
+    char _18[0x200];
     int attachment_dmg;
     char _21c[0x2dc];
     ExEffectType ex_effect;
     int ex_effect_value;
-    char _500[0x27c];
+    char _500[0xc];
+    bool is_attached;
+    char _50d[0x27c - 0xd];
     WeaponType weapon_type;
     char _780[0x64];
     int base_attack;
@@ -26,6 +35,7 @@ struct WeaponComponent {
     int calcAttack();
     int calcAttachmentAttack();
 };
+static_assert(offsetof(WeaponComponent, weapon_type) == 0x77c);
 
 using GetAttack = float (void*); // should be WeaponComponent* but this is easier
 inline GetAttack* getAttachZonauAttackValue = nullptr;
