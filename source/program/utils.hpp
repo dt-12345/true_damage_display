@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util.h>
+#include <common.hpp>
 
 #define PRINT(...)                                         \
 	{                                                      \

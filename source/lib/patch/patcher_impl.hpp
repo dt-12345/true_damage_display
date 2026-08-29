@@ -15,7 +15,7 @@ namespace exl::patch {
         inline void InitPatcherImpl() {
             auto& mod = util::GetMainModuleInfo();
             auto start = mod.m_Total.m_Start;
-            auto size = mod.m_Rodata.GetEnd() - start;
+            auto size = mod.m_Total.GetEnd() - start;
             util::ConstructAt(s_Storage, start, size);
         }
     };

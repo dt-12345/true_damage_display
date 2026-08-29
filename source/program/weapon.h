@@ -40,6 +40,8 @@ static_assert(offsetof(WeaponComponent, weapon_type) == 0x77c);
 using GetAttack = float (void*); // should be WeaponComponent* but this is easier
 inline GetAttack* getAttachZonauAttackValue = nullptr;
 inline GetAttack* getAttachMulAttackValue = nullptr;
+using GetAttack1 = float* (void*);
+inline GetAttack1* getAttachMulAttackValue1 = nullptr;
 
 struct PouchActorInfoRow {
     char _00[0xe0];

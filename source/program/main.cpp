@@ -1,5 +1,5 @@
-// #define TRUE_DAMAGE_DISPLAY
-#define NO_SAVE_IN_COMBAT
+#define TRUE_DAMAGE_DISPLAY
+// #define NO_SAVE_IN_COMBAT
 
 #ifdef TRUE_DAMAGE_DISPLAY
 #   include "weapon.h"
@@ -123,6 +123,266 @@ HOOK_DEFINE_INLINE(SetWeaponType) {
             ctx->W[8] = static_cast<int>(WeaponType::SmallSword);
     }
 };
+
+// #include "config.hpp"
+// #include "version.hpp"
+
+#include <array>
+#include <cmath>
+
+#define DEFINE_ATTR(Name) Name,
+enum ExternalDamageAttributes {
+#include "damage_attrs.inc"
+};
+#undef DEFINE_ATTR
+
+#define DEFINE_ATTR(NAME) #NAME,
+static constexpr auto cAttributeNames = std::to_array<const char*>({
+#include "damage_attrs.inc"
+});
+#undef DEFINE_ATTR
+static_assert(cAttributeNames.size() > 0 && cAttributeNames.size() <= 0x40); // attributes are stored as a 64-bit mask
+
+enum DamageElement {
+    Fire,
+    Ice,
+    Electric,
+    Wind,
+    Water,
+    Light,
+    Miasma,
+    Confuse,
+    Bomb,
+};
+
+struct ExternalHitInfo {
+    char _00[0x70];
+    u16 dmg_element_mask;
+};
+
+struct TgHitInfo {
+    char _00[0x1b0];
+    u64 dmg_attr_mask;
+};
+
+// adds Miasma element for MildlyHardMiasma attacks which is required to even consider reducing max life
+HOOK_DEFINE_TRAMPOLINE(EvalTgHit) {
+    static void Callback(void* calc, void* arg, ExternalHitInfo& info, const TgHitInfo& tg_hit) {
+        Orig(calc, arg, info, tg_hit);
+        if ((tg_hit.dmg_attr_mask >> MildlyHardMiasma & 1) != 0) {
+            info.dmg_element_mask |= 1 << Miasma;
+        }
+    }
+};
+
+struct Life {
+    char _00[0x1d0];
+    u64 dmg_attr_mask;
+};
+
+// makes MildlyHardMiasma pass the same check as HardMiasma for actually reducing max health
+HOOK_DEFINE_INLINE(BreakHeart) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        Life* life = reinterpret_cast<Life*>(ctx->X[19]);
+        if ((life->dmg_attr_mask >> MildlyHardMiasma & 1) != 0) {
+            ctx->W[8] |= 0x10;
+        }
+    }
+};
+
+// makes MildlyHardMiasma be treated the same way as HardMiasma by the UI
+HOOK_DEFINE_INLINE(BreakHeartUI) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        Life* life = reinterpret_cast<Life*>(ctx->X[8]);
+        if ((life->dmg_attr_mask >> MildlyHardMiasma & 1) != 0) {
+            ctx->W[9] |= 0x10;
+        }
+    }
+};
+
+class Animator {
+public:
+    virtual void* GetRuntimeTypeInfo() const;
+    virtual ~Animator();
+    // I cannot be bothered to add the correct signatures for all of these
+    virtual void UpdateFrame();
+    virtual void SetEnabled();
+    virtual void Animate();
+    virtual void AnimatePane();
+    virtual void AnimateMaterial();
+    virtual void SetResource();
+    virtual void SetResource1();
+    virtual void BindPane();
+    virtual void BindGroup();
+    virtual void BindMaterial();
+    virtual void ForceBindPane();
+    virtual void UnbindPane();
+    virtual void UnbindGroup();
+    virtual void UnbindMaterial();
+    virtual void UnbindAll();
+    virtual void f0x90();
+    virtual void f0x98();
+    virtual void AnimatePaneImpl();
+    virtual void AnimateMaterialImpl();
+    virtual void AnimateExtUserDataImpl();
+    virtual void Play(bool, float);
+    virtual void PlayAuto(float);
+    virtual void PlayFromCurrent(bool, float);
+    virtual void Stop(float);
+    virtual void StopCurrent();
+    virtual void StopAtMin();
+    virtual void StopAtMax();
+};
+
+struct Vector2f { float x, y; };
+struct Vector3f { float x, y, z; };
+
+struct Pane {
+    char _00[0x18];
+    Pane* parent;
+    char _20[0x10];
+    Vector3f translate;
+    char _3c[0x58 - 0x3c];
+    u8 flags;
+};
+
+struct Layout {
+    char _00[0x18];
+    Pane* rootPane;
+};
+
+struct PartsScreen {
+    char _00[0x20];
+    Layout* layout;
+    char _28[8];
+};
+
+struct UIBreakHeartPartsScreen : public PartsScreen {
+    char _30[0x50 - 0x30];
+    Animator* animator;
+};
+
+struct PaneHeartGauge : public PartsScreen {
+    PartsScreen* noGauge[40];
+    Pane* noGaugePane;
+    UIBreakHeartPartsScreen* breakHearts[40];
+    Pane* breakPane;
+    char _2c0[0x300 - 0x2c0];
+    Vector2f trans;
+    Vector2f width;
+    float lastLife;
+    int life;
+    float lastMaxLife;
+    int maxLife;
+    char _320[0x354 - 0x320];
+    u16 flags;
+};
+
+using PlayNullFunc = void (PartsScreen*, int);
+using GetPositionFunc = void (PaneHeartGauge*, Vector2f&, int);
+using PlayHardHeartBreakFunc = void (UIBreakHeartPartsScreen*, int, bool);
+using PlayAnimFunc = void (Layout*, int);
+using StartAnimFunc = void (UIBreakHeartPartsScreen*, int);
+using AppendChildFunc = void (Pane*, Pane*);
+using RemoveChildFunc = void (Pane*, Pane*);
+
+PlayNullFunc* PlayNull = nullptr;
+GetPositionFunc* GetPosition = nullptr;
+PlayHardHeartBreakFunc* PlayHardHeartBreak = nullptr;
+PlayAnimFunc* PlayAnim = nullptr;
+StartAnimFunc* StartAnim = nullptr;
+AppendChildFunc* AppendChild = nullptr;
+RemoveChildFunc* RemoveChild = nullptr;
+
+using GetBoolFunc = bool (void*, bool&, u32);
+GetBoolFunc* GetBool = nullptr;
+void** GameDataMgr = nullptr;
+// honestly should use this for every version but I already got the offsets so whatever
+void GetPositionImpl(PaneHeartGauge* gauge, Vector2f& pos, int index) {
+    bool watchedCutscene = false;
+    const auto heartsPerRow = GetBool(*GameDataMgr, watchedCutscene, 0x2af1b8bd) && watchedCutscene ? 20 : 15;
+    pos = {
+        gauge->trans.x + gauge->width.x * static_cast<float>(index % heartsPerRow),
+        gauge->trans.y + gauge->width.y * static_cast<float>(index / heartsPerRow),
+    };
+}
+
+static bool IsNewVersion() {
+    return version >= 6;
+}
+
+// handles making each heart disappear from the hp display after it's broken
+HOOK_DEFINE_INLINE(PlayDisappear) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        PaneHeartGauge* gauge = reinterpret_cast<PaneHeartGauge*>(ctx->X[19]);
+        const auto maxIndex = static_cast<int>(IsNewVersion() ? ctx->W[8] : ctx->W[22]);
+        const auto currentMaxLife = std::min(static_cast<float>(gauge->maxLife), gauge->lastMaxLife);
+        const auto minIndex = static_cast<int>(std::ceil(currentMaxLife / 4));
+        for (int i = minIndex; i <= maxIndex; ++i) {
+            PartsScreen* part = gauge->noGauge[i];
+            if (part == nullptr) {
+                continue;
+            }
+            PlayNull(part, 0);
+            // the outer function is inlined on earlier versions but I'm lazy so we'll do this
+            PlayAnim(IsNewVersion() ? reinterpret_cast<Layout*>(part) : part->layout, 1);
+            if (part->layout->rootPane->parent == gauge->breakPane) {
+                RemoveChild(part->layout->rootPane->parent, part->layout->rootPane);
+            }
+        }
+
+        ctx->X[21] = 0;
+    }
+};
+
+// handles playing the heart breaking animation
+HOOK_DEFINE_INLINE(PlayBreak) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        PaneHeartGauge* gauge = reinterpret_cast<PaneHeartGauge*>(ctx->X[19]);
+        const auto maxIndex = static_cast<int>(IsNewVersion() ? ctx->W[20] : ctx->W[22]);
+        const auto currentMaxLife = std::min(static_cast<float>(gauge->maxLife), gauge->lastMaxLife);
+        const auto minIndex = static_cast<int>(std::ceil(currentMaxLife / 4));
+        for (int i = minIndex; i <= maxIndex; ++i) {
+            UIBreakHeartPartsScreen* part = gauge->breakHearts[i];
+            if (part == nullptr) {
+                continue;
+            }
+            Vector2f pos;
+            GetPosition(gauge, pos, i);
+            part->layout->rootPane->translate = { pos.x, pos.y, 0.f };
+            part->layout->rootPane->flags |= 0x10;
+            part->animator->Stop(0.f);
+            PlayHardHeartBreak(part, 0, false);
+            StartAnim(part, 1);
+            if (part->layout->rootPane->parent == nullptr) {
+                AppendChild(gauge->breakPane, part->layout->rootPane);
+            }
+        }
+        gauge->flags |= 8;
+
+        // cause the normal check to fail since we just handled the logic
+        ctx->X[21] = 0;
+    }
+};
+
+// prevents fairies from healing the player more than their max life
+HOOK_DEFINE_INLINE(OverrideFairy) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        ctx->W[9] = 0;
+    }
+};
+
+HOOK_DEFINE_INLINE(FixPtr1) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        ctx->X[9] = reinterpret_cast<u64>(cAttributeNames.data()) - 0x428;
+    }
+};
+
+HOOK_DEFINE_INLINE(FixPtr2) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        ctx->X[16] = reinterpret_cast<u64>(cAttributeNames.data()) - 0x428;
+    }
+};
 #endif
 
 #ifdef NO_SAVE_IN_COMBAT
@@ -139,7 +399,7 @@ extern "C" void exl_main(void* x0, void* x1) {
     main_offset = exl::util::modules::GetTargetStart();
     version = InitializeAppVersion();
 
-    if (version == 0xffffffff || version > 8) {
+    if (version == 0xffffffff || version > 9) {
         EXL_ABORT(0x69);
     }
 
@@ -160,7 +420,64 @@ extern "C" void exl_main(void* x0, void* x1) {
     INSTALL(SetWeaponType, sSetWeaponTypeOffsets2[version])
     INSTALL(SetWeaponType, sSetWeaponTypeOffsets3[version])
     getAttachZonauAttackValue = reinterpret_cast<GetAttack*>(exl::util::modules::GetTargetOffset(sZonauAttachValueOffsets[version]));
-    getAttachMulAttackValue = reinterpret_cast<GetAttack*>(exl::util::modules::GetTargetOffset(sAttachMulValueOffsets[version]));
+    if (version < 6) {
+        getAttachMulAttackValue = reinterpret_cast<GetAttack*>(exl::util::modules::GetTargetOffset(sAttachMulValueOffsets[version]));
+    } else {
+        getAttachMulAttackValue1 = reinterpret_cast<GetAttack1*>(exl::util::modules::GetTargetOffset(sAttachMulValueOffsets[version]));
+    }
+
+    #define OFFSET(X) c ## X ## Offsets[static_cast<int>(version)]
+
+    using namespace exl::armv8::reg;
+    using namespace exl::armv8::inst;
+
+    auto patcher = exl::patch::StreamPatcher(0);
+    if (IsNewVersion()) {
+        FixPtr1::InstallAtOffset(OFFSET(FixPtr1));
+        FixPtr2::InstallAtOffset(OFFSET(FixPtr2));
+
+        const auto cmp = CmpImmediate(Register(RegisterKind::W, 11), cAttributeNames.size()).Value();
+        patcher.Seek(OFFSET(ExtraCompare1));
+        patcher.Write(cmp);
+        patcher.Seek(OFFSET(ExtraCompare2));
+        patcher.Write(cmp);
+    } else {
+        patcher.Seek(OFFSET(EnumName));
+        patcher.Write(reinterpret_cast<u64>(cAttributeNames.data()) - 0x428);
+    }
+
+    const auto cmpx = IsNewVersion()
+        ? CmpImmediate(Register(RegisterKind::W, 11), cAttributeNames.size() - 1).Value()
+        : CmpImmediate(Register(RegisterKind::X, 8), cAttributeNames.size()).Value();
+    const auto cmpw = CmpImmediate(Register(RegisterKind::W, 8), cAttributeNames.size() - 1).Value();
+
+    patcher.Seek(OFFSET(CompareX));
+    patcher.Write(cmpx);
+    patcher.Seek(OFFSET(CompareW));
+    patcher.Write(cmpw);
+
+    EvalTgHit::InstallAtOffset(OFFSET(EvalTgHit));
+    BreakHeart::InstallAtOffset(OFFSET(BreakHeart));
+    BreakHeartUI::InstallAtOffset(OFFSET(BreakHeartUI));
+    PlayDisappear::InstallAtOffset(OFFSET(PlayDisappear));
+    PlayBreak::InstallAtOffset(OFFSET(PlayBreak));
+    OverrideFairy::InstallAtOffset(OFFSET(OverrideFairy));
+
+    PlayNull = reinterpret_cast<PlayNullFunc*>(exl::util::modules::GetTargetOffset(OFFSET(PlayNull)));
+    if (IsNewVersion()) {
+        GetPosition = GetPositionImpl;
+        GameDataMgr = reinterpret_cast<void**>(exl::util::modules::GetTargetOffset(OFFSET(GameDataMgr)));
+        GetBool = reinterpret_cast<GetBoolFunc*>(exl::util::modules::GetTargetOffset(OFFSET(GetBool)));
+    } else {
+        GetPosition = reinterpret_cast<GetPositionFunc*>(exl::util::modules::GetTargetOffset(OFFSET(GetPosition)));
+    }
+    PlayHardHeartBreak = reinterpret_cast<PlayHardHeartBreakFunc*>(exl::util::modules::GetTargetOffset(OFFSET(PlayHardHeartBreak)));
+    PlayAnim = reinterpret_cast<PlayAnimFunc*>(exl::util::modules::GetTargetOffset(OFFSET(PlayAnim)));
+    StartAnim = reinterpret_cast<StartAnimFunc*>(exl::util::modules::GetTargetOffset(OFFSET(StartAnim)));
+    AppendChild = reinterpret_cast<AppendChildFunc*>(exl::util::modules::GetTargetOffset(OFFSET(AppendChild)));
+    RemoveChild = reinterpret_cast<RemoveChildFunc*>(exl::util::modules::GetTargetOffset(OFFSET(RemoveChild)));
+
+    #undef OFFSET
 #endif
 
 #ifdef NO_SAVE_IN_COMBAT

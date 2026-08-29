@@ -11,6 +11,7 @@ const char GAME_VERSION_1_2_1[] = "1.2.1";
 const char GAME_VERSION_1_4_0[] = "1.4.0";
 const char GAME_VERSION_1_4_1[] = "1.4.1";
 const char GAME_VERSION_1_4_2[] = "1.4.2";
+const char GAME_VERSION_1_4_3[] = "1.4.3";
 
 extern char sAppVersion[0x10];
 extern u32  sAppVersionIndex;

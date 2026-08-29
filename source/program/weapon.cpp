@@ -3,13 +3,15 @@
 
 #include <cmath>
 
+#include "utils.hpp"
+
 static float getAttachMulAttackValueThunk(void* cmp) {
     if (version < 6)
         return getAttachMulAttackValue(cmp);
     WeaponComponent* comp = reinterpret_cast<WeaponComponent*>(cmp);
     if (!comp->is_attached)
         return 1.f;
-    return getAttachMulAttackValue(comp->document->typed_param);
+    return *getAttachMulAttackValue1(comp->document->typed_param);
 }
 
 // replaces 0x7101674bc4 on 1.2.1
